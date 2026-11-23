@@ -14,11 +14,13 @@
 #include "widgets/row.hpp"
 #include "widgets/scrollview.hpp"
 #include "widgets/text.hpp"
+#include "widgets/toggleSwitch.hpp"
 #include "widgets/topNav.hpp"
 
 
 namespace ui {
 	void Home::State::initState() {
+		settings = appsettings::load();
 		auto task = std::thread([this]() {
 			std::filesystem::path assetsPath = "assets";
 			if (!std::filesystem::exists(assetsPath)) {
@@ -30,7 +32,11 @@ namespace ui {
 			auto localVersion = util::Version::parse(localManifest.version);
 			auto latestVersion = latestManifest ? util::Version::parse(latestManifest->version) : localVersion;
 			if (localVersion < latestVersion) {
-				manifestUpdateAvailable = true;
+				if (settings.autoUpdateData) {
+					autoUpdatePending = true;
+				} else {
+					manifestUpdateAvailable = true;
+				}
 			} else {
 				serialization::NanokaData::get();
 				serialization::Datamine::get();
@@ -40,13 +46,56 @@ namespace ui {
 			// crypto::xorpad::initialSeed = std::stoull(serialization::Datamine::get().xorSeeds.at("Europe"), nullptr, 16);
 			// pcap.loadCapturePacketsFromFile();
 			onEventUpdate = pcap.onEventUpdate.observe([this]() {
+				handleCaptureEvent();
 				setState();
 			});
 			setState([&]() {
 				isLoading = false;
 			});
+			if (autoUpdatePending) {
+				autoUpdatePending = false;
+				updateData();
+			} else if (!manifestUpdateAvailable) {
+				applySavedRegionAndAutoStart();
+			}
 		});
 		task.detach();
+	}
+
+	void Home::State::applySavedRegionAndAutoStart() {
+		if (settings.region.empty()) return;
+		auto &datamine = serialization::Datamine::get();
+		for (const auto &[region, seed]: datamine.xorSeeds) {
+			if (region != settings.region) continue;
+			crypto::xorpad::initialSeed = std::stoull(seed, nullptr, 16);
+			if (settings.autoStart && !isCapturing) {
+				pcap.listen();
+				setState([&]() {
+					isCapturing = true;
+				});
+			} else {
+				setState();
+			}
+			return;
+		}
+	}
+
+	void Home::State::handleCaptureEvent() {
+		if (!settings.autoSave) return;
+		if (pcap.discs.empty() || pcap.agents.empty() || pcap.engines.empty()) return;
+		auto path = autoexport::write(pcap, exportSettings, exportSession);
+		if (!path) return;
+		std::scoped_lock lock{*statusMutex};
+		savedPath = path->string();
+		savedSummary = std::format("{} discs, {} agents, {} W-Engines · saved {}", pcap.discs.size(), pcap.agents.size(), pcap.engines.size(), autoexport::timestamp("%H:%M:%S"));
+	}
+
+	std::string Home::State::statusText() {
+		std::scoped_lock lock{*statusMutex};
+		if (!savedPath.empty()) return std::format("Saved to {} ({})", savedPath, savedSummary);
+		if (isCapturing) return "Capturing. Launch Zenless Zone Zero and log in (if it is already open, log out to the title screen and back in).";
+		if (settings.region.empty()) return "Pick your region and press Start capture. Next time capture starts on its own.";
+		return "Ready. Press Start capture, then log in to the game.";
 	}
 
 	void Home::State::updateData() {
@@ -60,6 +109,7 @@ namespace ui {
 				setState([&]() {
 					isLoading = false;
 				});
+				applySavedRegionAndAutoStart();
 				return;
 			}
 
@@ -69,6 +119,7 @@ namespace ui {
 				setState([&]() {
 					isLoading = false;
 				});
+				applySavedRegionAndAutoStart();
 				return;
 			}
 
@@ -78,6 +129,7 @@ namespace ui {
 				setState([&]() {
 					isLoading = false;
 				});
+				applySavedRegionAndAutoStart();
 				return;
 			}
 
@@ -93,6 +145,7 @@ namespace ui {
 				isLoading = false;
 				manifestUpdateAvailable = false;
 			});
+			applySavedRegionAndAutoStart();
 		});
 		task.detach();
 	}
@@ -108,6 +161,7 @@ namespace ui {
 			setState([&]() {
 				isLoading = false;
 			});
+			applySavedRegionAndAutoStart();
 		});
 		task.detach();
 	}
@@ -211,8 +265,10 @@ namespace ui {
 												for (const auto &[region, seed]: datamine.xorSeeds) {
 													items.push_back(ContextMenu::Button{
 														.text = region,
-														.callback = [this, seed]() {
+														.callback = [this, seed, region]() {
 															crypto::xorpad::initialSeed = std::stoull(seed, nullptr, 16);
+															settings.region = region;
+															appsettings::save(settings);
 															setState();
 														},
 													});
@@ -233,6 +289,63 @@ namespace ui {
 												});
 											},
 											.child = isCapturing ? "Capturing..." : "Start capture",
+										},
+									},
+								},
+							},
+							Expander{
+								.title = "Automatic export",
+								.subtitle = statusText(),
+								.action = Button{
+									.onClick = []() {
+										autoexport::openFolder();
+									},
+									.child = "Open exports folder",
+								},
+								.content = Column{
+									.spacer = ExpanderItemSpacer{},
+									.children{
+										ExpanderItem{
+											.icon = ToggleSwitch{
+												.active = settings.autoSave,
+												.statePosition = ToggleSwitch::StatePosition::None,
+												.onToggle = [this](bool val) {
+													setState([&]() {
+														settings.autoSave = val;
+													});
+													appsettings::save(settings);
+												},
+											},
+											.title = "Save a JSON file automatically",
+											.subtitle = "Written to the exports folder next to this program as soon as your data is captured. latest.json is always the newest.",
+										},
+										ExpanderItem{
+											.icon = ToggleSwitch{
+												.active = settings.autoStart,
+												.statePosition = ToggleSwitch::StatePosition::None,
+												.onToggle = [this](bool val) {
+													setState([&]() {
+														settings.autoStart = val;
+													});
+													appsettings::save(settings);
+												},
+											},
+											.title = "Start capturing when the program opens",
+											.subtitle = "Uses the last region you picked.",
+										},
+										ExpanderItem{
+											.icon = ToggleSwitch{
+												.active = settings.autoUpdateData,
+												.statePosition = ToggleSwitch::StatePosition::None,
+												.onToggle = [this](bool val) {
+													setState([&]() {
+														settings.autoUpdateData = val;
+													});
+													appsettings::save(settings);
+												},
+											},
+											.title = "Update game data automatically",
+											.subtitle = "Downloads new data files after a game patch without asking.",
 										},
 									},
 								},

@@ -3,6 +3,10 @@
 #include "../pcap/pcap.hpp"
 #include "core/core.hpp"
 #include "data/exportSettings.hpp"
+#include "util/appSettings.hpp"
+#include "util/autoExport.hpp"
+#include <memory>
+#include <mutex>
 
 namespace ui {
 	using namespace squi;
@@ -19,6 +23,18 @@ namespace ui {
 			data::ExportSettings exportSettings;
 			Pcap pcap;
 			VoidObserver onEventUpdate{};
+
+			// Auto-export additions
+			appsettings::AppSettings settings{};
+			autoexport::Session exportSession{};
+			bool autoUpdatePending = false;
+			std::shared_ptr<std::mutex> statusMutex = std::make_shared<std::mutex>();
+			std::string savedPath{};
+			std::string savedSummary{};
+
+			void applySavedRegionAndAutoStart();
+			void handleCaptureEvent();
+			std::string statusText();
 
 			void initState() override;
 
