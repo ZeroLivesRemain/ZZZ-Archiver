@@ -6,6 +6,7 @@
 #include "util/appSettings.hpp"
 #include "util/autoExport.hpp"
 #include <memory>
+#include <functional>
 #include <mutex>
 
 namespace ui {
@@ -32,6 +33,8 @@ namespace ui {
 			std::string savedPath{};
 			std::string savedSummary{};
 
+			std::string loadError{};
+			void guarded(const std::function<void()> &fn);
 			void applySavedRegionAndAutoStart();
 			void handleCaptureEvent();
 			std::string statusText();

@@ -89,6 +89,21 @@ jobs:
           Copy-Item build\Release\*.dll $out -ErrorAction SilentlyContinue
           Copy-Item build\Release\assets $out -Recurse
           Copy-Item README.md, LICENSE $out
+          # Bundle the nanoka game data (names of agents, sets and W-Engines) so the first launch works offline,
+          # like upstream release zips do. The program refreshes it later when a newer version is published.
+          try {
+            $v = (Invoke-RestMethod https://static.nanoka.cc/manifest.json).zzz.live
+            function Get-Text($url) { $r = Invoke-WebRequest $url -UseBasicParsing; [System.Text.Encoding]::UTF8.GetString($r.RawContentStream.ToArray()) }
+            $c = Get-Text "https://static.nanoka.cc/zzz/$v/character.json"
+            $e = Get-Text "https://static.nanoka.cc/zzz/$v/equipment.json"
+            $w = Get-Text "https://static.nanoka.cc/zzz/$v/weapon.json"
+            $json = '{"version":"' + $v + '","characters":' + $c + ',"equipment":' + $e + ',"weapons":' + $w + '}'
+            [System.IO.File]::WriteAllText("$out\assets\nanokaData.json", $json, (New-Object System.Text.UTF8Encoding $false))
+            Write-Host "Bundled nanoka data version $v"
+          } catch {
+            Write-Warning "Could not bundle nanoka data: $_"
+          }
+          Get-ChildItem -Recurse $out | Select-Object FullName, Length | Format-Table -AutoSize
           Compress-Archive -Path "$out\*" -DestinationPath "dist\zzz_packet_capture_auto_export.zip" -Force
 
       - name: Upload build artifact

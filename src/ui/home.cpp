@@ -21,7 +21,7 @@
 namespace ui {
 	void Home::State::initState() {
 		settings = appsettings::load();
-		auto task = std::thread([this]() {
+		auto task = std::thread([this]() { guarded([&]() {
 			std::filesystem::path assetsPath = "assets";
 			if (!std::filesystem::exists(assetsPath)) {
 				std::filesystem::create_directory(assetsPath);
@@ -58,8 +58,28 @@ namespace ui {
 			} else if (!manifestUpdateAvailable) {
 				applySavedRegionAndAutoStart();
 			}
-		});
+		}); });
 		task.detach();
+	}
+
+	// Background loading must never take the whole program down: report the problem on screen instead.
+	void Home::State::guarded(const std::function<void()> &fn) {
+		try {
+			fn();
+		} catch (const std::exception &e) {
+			debug::log("Startup error: {}", e.what());
+			std::string message = e.what();
+			setState([&]() {
+				loadError = message;
+				isLoading = false;
+			});
+		} catch (...) {
+			debug::log("Startup error: unknown exception");
+			setState([&]() {
+				loadError = "Unknown error";
+				isLoading = false;
+			});
+		}
 	}
 
 	void Home::State::applySavedRegionAndAutoStart() {
@@ -102,7 +122,7 @@ namespace ui {
 		setState([&]() {
 			isLoading = true;
 		});
-		auto task = std::thread([this]() {
+		auto task = std::thread([this]() { guarded([&]() {
 			auto latestManifest = util::serializable::fromNetwork<serialization::Manifest>(serialization::manifestUrl);
 			if (!latestManifest) {
 				debug::log("Failed to fetch latest manifest.json");
@@ -146,7 +166,7 @@ namespace ui {
 				manifestUpdateAvailable = false;
 			});
 			applySavedRegionAndAutoStart();
-		});
+		}); });
 		task.detach();
 	}
 
@@ -154,7 +174,7 @@ namespace ui {
 		setState([&]() {
 			isLoading = true;
 		});
-		auto task = std::thread([this]() {
+		auto task = std::thread([this]() { guarded([&]() {
 			serialization::NanokaData::get();
 			serialization::Datamine::get();
 			serialization::Proto::get();
@@ -162,7 +182,7 @@ namespace ui {
 				isLoading = false;
 			});
 			applySavedRegionAndAutoStart();
-		});
+		}); });
 		task.detach();
 	}
 
@@ -190,6 +210,23 @@ namespace ui {
 					.alignment = squi::core::Alignment::Center,
 				},
 				.text = "Loading...",
+			};
+		}
+
+		if (!loadError.empty()) {
+			return Column{
+				.widget{
+					.width = Size::Shrink,
+					.height = Size::Shrink,
+					.alignment = squi::core::Alignment::Center,
+				},
+				.crossAxisAlignment = Flex::Alignment::center,
+				.spacing = 8.f,
+				.children{
+					Text{.text = "Could not load the game data: " + loadError},
+					Text{.text = "Check your internet connection and start the program again."},
+					Text{.text = "Details are in logs\\zzz_packet_capture.log next to the program."},
+				},
 			};
 		}
 
