@@ -20,7 +20,7 @@ jobs:
           submodules: recursive
 
       - name: Restore vcpkg binary cache
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: ${{ github.workspace }}\vcpkg-cache
           key: vcpkg-${{ runner.os }}-${{ hashFiles('vcpkg.json', 'glt/vcpkg.json', 'vcpkg-overlay-ports/**') }}
@@ -44,13 +44,37 @@ jobs:
       - name: Set up MSVC environment (for clang)
         uses: ilammy/msvc-dev-cmd@v1
 
+      - name: Pick a Clang that matches the MSVC standard library
+        shell: pwsh
+        run: |
+          # The MSVC STL refuses older Clang versions, so prefer the Clang bundled with Visual Studio.
+          $vs = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath
+          $bundled = Join-Path $vs "VC\Tools\Llvm\x64\bin"
+          if (Test-Path (Join-Path $bundled "clang++.exe")) {
+            $bin = $bundled
+          } else {
+            choco install llvm -y --no-progress | Out-Null
+            $bin = "C:\Program Files\LLVM\bin"
+          }
+          & (Join-Path $bin "clang++.exe") --version
+          "CLANG_BIN=$bin" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          $bin | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+
       - name: Bootstrap vcpkg
         shell: cmd
         run: glt\vcpkg\bootstrap-vcpkg.bat -disableMetrics
 
       - name: Configure
         shell: cmd
-        run: cmake -B build -G "Ninja Multi-Config" -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
+        run: cmake -B build -G "Ninja Multi-Config" -DCMAKE_C_COMPILER="%CLANG_BIN%\clang.exe" -DCMAKE_CXX_COMPILER="%CLANG_BIN%\clang++.exe"
+
+      - name: Save vcpkg binary cache
+        if: always()
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ github.workspace }}\vcpkg-cache
+          key: vcpkg-${{ runner.os }}-${{ hashFiles('vcpkg.json', 'glt/vcpkg.json', 'vcpkg-overlay-ports/**') }}
 
       - name: Build
         shell: cmd
