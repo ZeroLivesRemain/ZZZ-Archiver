@@ -5,6 +5,7 @@
 #include "data/exportSettings.hpp"
 #include "util/appSettings.hpp"
 #include "util/autoExport.hpp"
+#include <memory>
 #include <mutex>
 
 namespace ui {
@@ -27,7 +28,7 @@ namespace ui {
 			appsettings::AppSettings settings{};
 			autoexport::Session exportSession{};
 			bool autoUpdatePending = false;
-			std::mutex statusMutex;
+			std::shared_ptr<std::mutex> statusMutex = std::make_shared<std::mutex>();
 			std::string savedPath{};
 			std::string savedSummary{};
 

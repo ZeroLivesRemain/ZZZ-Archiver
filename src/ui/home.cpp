@@ -85,13 +85,13 @@ namespace ui {
 		if (pcap.discs.empty() || pcap.agents.empty() || pcap.engines.empty()) return;
 		auto path = autoexport::write(pcap, exportSettings, exportSession);
 		if (!path) return;
-		std::scoped_lock lock{statusMutex};
+		std::scoped_lock lock{*statusMutex};
 		savedPath = path->string();
 		savedSummary = std::format("{} discs, {} agents, {} W-Engines · saved {}", pcap.discs.size(), pcap.agents.size(), pcap.engines.size(), autoexport::timestamp("%H:%M:%S"));
 	}
 
 	std::string Home::State::statusText() {
-		std::scoped_lock lock{statusMutex};
+		std::scoped_lock lock{*statusMutex};
 		if (!savedPath.empty()) return std::format("Saved to {} ({})", savedPath, savedSummary);
 		if (isCapturing) return "Capturing. Launch Zenless Zone Zero and log in (if it is already open, log out to the title screen and back in).";
 		if (settings.region.empty()) return "Pick your region and press Start capture. Next time capture starts on its own.";
