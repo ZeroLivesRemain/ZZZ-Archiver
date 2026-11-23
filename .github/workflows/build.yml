@@ -1,0 +1,85 @@
+name: Build Windows release
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [master, main, auto-export]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 180
+    env:
+      VCPKG_BINARY_SOURCES: "clear;files,${{ github.workspace }}\\vcpkg-cache,readwrite"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Restore vcpkg binary cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}\vcpkg-cache
+          key: vcpkg-${{ runner.os }}-${{ hashFiles('vcpkg.json', 'glt/vcpkg.json', 'vcpkg-overlay-ports/**') }}
+          restore-keys: vcpkg-${{ runner.os }}-
+
+      - name: Create cache folder
+        shell: pwsh
+        run: New-Item -ItemType Directory -Force -Path "${{ github.workspace }}\vcpkg-cache" | Out-Null
+
+      - name: Install Vulkan SDK (for glslc)
+        uses: jakoch/install-vulkan-sdk-action@v1
+        with:
+          vulkan_version: latest
+          install_runtime: false
+          cache: true
+          stripdown: true
+
+      - name: Set up Ninja
+        uses: seanmiddleditch/gha-setup-ninja@v5
+
+      - name: Set up MSVC environment (for clang)
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Bootstrap vcpkg
+        shell: cmd
+        run: glt\vcpkg\bootstrap-vcpkg.bat -disableMetrics
+
+      - name: Configure
+        shell: cmd
+        run: cmake -B build -G "Ninja Multi-Config" -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
+
+      - name: Build
+        shell: cmd
+        run: cmake --build build --config Release
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $out = "dist\zzz_packet_capture"
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+          Copy-Item build\Release\*.exe $out
+          Copy-Item build\Release\*.dll $out -ErrorAction SilentlyContinue
+          Copy-Item build\Release\assets $out -Recurse
+          Copy-Item README.md, LICENSE $out
+          Compress-Archive -Path "$out\*" -DestinationPath "dist\zzz_packet_capture_auto_export.zip" -Force
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: zzz_packet_capture_auto_export
+          path: dist\zzz_packet_capture_auto_export.zip
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: ZZZ Packet Capture (auto-export) build ${{ github.run_number }}
+          body: |
+            Download **zzz_packet_capture_auto_export.zip**, extract it, and run `zzz_packet_capture.exe` (it asks for administrator rights).
+            Your export is saved automatically to the `exports` folder next to the program (`latest.json` is always the newest).
+          files: dist\zzz_packet_capture_auto_export.zip
+          make_latest: true

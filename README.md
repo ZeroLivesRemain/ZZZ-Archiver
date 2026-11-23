@@ -1,3 +1,23 @@
+# ZZZ Packet Capture — auto-export edition
+
+A fork of [AleXu224/zzz_packet_capture](https://github.com/AleXu224/zzz_packet_capture) (MIT) that works more like Reliquary Archiver:
+
+- **Saves the export automatically.** As soon as your agents, W-Engines and discs are captured, a ZOD JSON file is written to the `exports` folder next to the program: `zzz_export_<date>_<time>.json`, plus `latest.json`, which is always the newest. No "Copy to clipboard" step needed (the button still works).
+- **Remembers your region** and **starts capturing on launch**, so the routine is: open the program, open the game, log in, done.
+- **Updates game data automatically** after a patch instead of asking (it still downloads the data files published by the original project).
+- The **Automatic export** panel shows where the file was saved and has an **Open exports folder** button. All three behaviours can be switched off there.
+
+Settings are stored in `settings.json` next to the program. All credit for the capture and decoding work goes to AleXu224 and contributors; this fork only changes how results are saved.
+
+## Quick start (Windows)
+1. Download `zzz_packet_capture_auto_export.zip` from this repository's **Releases** page and extract it.
+2. Run `zzz_packet_capture.exe` (it asks for administrator rights — packet capture needs them).
+3. First time only: pick your region and press **Start capture**.
+4. Launch Zenless Zone Zero and log in. When your character appears, the file is in `exports\latest.json`.
+5. Import that file into your optimizer.
+
+---
+
 # About
 A packet capture based scanner for Zenless Zone Zero. Used to quickly gather all your discs, engines and agents data from the game in a single click.
 
