@@ -1,75 +1,28 @@
-# ZZZ Packet Capture — auto-export edition
+# ZZZ Archiver
 
-A fork of [AleXu224/zzz_packet_capture](https://github.com/AleXu224/zzz_packet_capture) (MIT) that works more like Reliquary Archiver:
+Captures your Zenless Zone Zero agents, W-Engines and Drive Discs while you play and saves them as a JSON file for disc optimizers (ZOD format, the same format Zenless Optimizer and similar tools import). It works like Reliquary Archiver does for Honkai: Star Rail: open it, log in, and the file is written for you.
 
-- **Starts capturing the moment it opens.** No region to pick: the program tries each region's key on your login and remembers the one that works.
-- **Saves the export automatically when you log in.** As soon as your agents, W-Engines and discs are captured, a ZOD JSON file is written to the `exports` folder next to the program: `zzz_export_<date>_<time>.json`, plus `latest.json`, which is always the newest. No "Copy to clipboard" step needed (the button still works).
-- **Keeps up with your play session.** Leave it running while you play: new discs, upgrades, equip changes, W-Engines and agents are tracked as they happen, and **Save updated export** writes a fresh file with them (the button shows how many changes are waiting). Earlier files are kept.
-- **Updates game data automatically** after a patch instead of asking (it still downloads the data files published by the original project).
-- The **Automatic export** panel shows where the file was saved and has **Save updated export** and **Open exports folder** buttons. Automatic saving, starting on launch and data updates can each be switched off there.
+## Quick guide (Windows)
 
-Settings are stored in `settings.json` next to the program. All credit for the capture and decoding work goes to AleXu224 and contributors; this fork changes how capture starts and how results are saved, and adds in-session updates.
+1. **Download** `zzz_packet_capture_auto_export.zip` from the [Releases](../../releases) page and extract it to a folder of your choice.
+2. **Run** `zzz_packet_capture.exe`. Windows asks for administrator rights, which packet capture needs. Capture starts right away; there's no region to pick.
+3. **Log in** to Zenless Zone Zero. If the game is already open, log out to the title screen and back in, because your inventory is only sent at login.
+4. **Get the file.** When your character appears, the export is saved to `exports\latest.json` in the program's folder, plus a dated copy (`zzz_export_<date>_<time>.json`). Import `latest.json` into your optimizer.
+5. **Keep it open while you play** (optional). New discs, upgrades, equip changes, W-Engines and agents are tracked as they happen. When you want them in your optimizer, press **Save updated export**: the button shows how many changes are waiting, and a fresh `latest.json` is written. Earlier files are kept.
 
-## Quick start (Windows)
-1. Download `zzz_packet_capture_auto_export.zip` from this repository's **Releases** page and extract it.
-2. Run `zzz_packet_capture.exe` (it asks for administrator rights — packet capture needs them). Capture starts right away.
-3. Launch Zenless Zone Zero and log in (if the game is already open, log out to the title screen and back in). When your character appears, the file is in `exports\latest.json`.
-4. Import that file into your optimizer.
-5. Keep the program open while you play. When you've farmed or upgraded discs, press **Save updated export** and import the new `latest.json`.
+## The window
 
----
+- **Scanning:** capture status and the region. The region is detected automatically from your login and remembered for next time; you only need to change it if detection fails.
+- **Automatic export:** where the last file was saved, plus **Save updated export** and **Open exports folder**. Three switches: save automatically at login, start capturing when the program opens, and update game data automatically.
+- **Export results:** the original **Copy to clipboard** button and export options, if you'd rather paste than import a file.
+- **Agents / Engines / Discs** (left-hand pages): what has been captured so far.
 
-# About
-A packet capture based scanner for Zenless Zone Zero. Used to quickly gather all your discs, engines and agents data from the game in a single click.
+Settings are saved in `settings.json` next to the program. If something goes wrong, `logs\zzz_packet_capture.log` in the same folder says what happened.
 
-It can be used to quickly import all your data into [Zenless Optimizer](https://frzyc.github.io/zenless-optimizer/) or other tools that accept the same data format.
+## After a game update
 
-![](preview.png)
-# Usage
-- Download the latest version from the [releases page](https://github.com/AleXu224/zzz_packet_capture/releases)
-- Extract the archive to a folder of your choice and start `zzz_packet_capture.exe`
-  - The program needs to start with administrator privileges in order to capture packets from the game, you will automatically be prompted to do so
-  - On linux you will need to manually start the program with sudo or run `sudo setcap cap_net_raw,cap_net_admin=eip zzz_packet_capture` to allow it to capture packets without root privileges
-- Choose your region and click "Start Capture"
-- Close Zenless Zone Zero if you haven't done so already
-- Start the game and log in, the program will automatically capture your data (should be done by the time you see your character in game)
-- Adjust your export settings if you want to, then click "Copy to clipboard" to get the exported data
+The game's packet layout changes with most patches. The program downloads the updated decoding data published by the original project when it's available. If capture stops working after a patch, check the Releases page for a newer build.
 
-# Disclaimer
-This is gonna break every time a new version comes out. I am singlehandedly maintaining this and reverse engineering is not exactly my forte, so it might take a bit for me to get it working again. If you have experience and want to help your best bet is to help with updating [GracefulDumper](https://github.com/AleXu224/GracefulDumper) to the latest version of the game, since that is the main blocker.
+## Credits
 
-If you are eager to help but have no experience then please don't hesitate to reach out and ask for how things are done, I might not be the best at it myself but I can certainly help you get started.
-
-# Building
-
-- Requirements:
-  - [CMake](https://github.com/kitware/cmake)
-  - A recent release of [Clang](https://github.com/llvm/llvm-project)
-    - Other compilers might work but I rarely test them
-  - [Ninja](https://github.com/ninja-build/ninja)
-    - Optional, but recommended for faster builds
-  - [Vulkan SDK](https://vulkan.lunarg.com/sdk/home)
-  - Windows: Visual Studio or Visual Studio Build Tools
-    - Make sure to install the "Desktop development with C++" workload
-  - Linux: only tested with libstdc++ 
-    - other dependencies depend on too many factors to list, CMake will tell you what is missing and needs installing
-- Building:
-  - Clone the repository and initialize the submodules:
-  ```bash
-  git clone https://github.com/AleXu224/zzz_packet_capture
-  cd zzz_packet_capture
-  git submodule update --init --recursive
-  ```
-  - Run cmake to generate the build files and install the dependencies (this will take a while):
-  ```bash
-  cmake -B build -G "Ninja Multi-Config" -DCMAKE_C_COMPILER="clang" -DCMAKE_CXX_COMPILER="clang++"
-  
-  cd build
-
-  ninja
-  # or if you want to build a release version
-  ninja -f ./build-Release.ninja
-  ```
-
-# Credits
-Massive thanks to the Reversed Rooms Discord for helping me with the reverse engineering. I wouldn't have been able to do this without them
+This is a fork of [zzz_packet_capture](https://github.com/AleXu224/zzz_packet_capture) by **AleXu224**, who wrote the packet capture, decryption and decoding this tool is built on, and who keeps the game data up to date after each patch. AleXu224 in turn thanks the Reversed Rooms Discord for their help with the reverse engineering. This fork adds automatic saving, start-on-launch with region detection, and in-session updates. It is released under the same MIT license; see [LICENSE](LICENSE).
