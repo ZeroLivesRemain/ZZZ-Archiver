@@ -304,6 +304,16 @@ namespace ui {
 						.widget{.height = Size::Wrap},
 						.spacing = 8.f,
 						.children{
+							// Capture runs continuously; this only appears if it isn't running (start-on-open switched off)
+							isCapturing ? Child{} : Child{Button{
+								.onClick = [this]() {
+									pcap.listen();
+									setState([&]() {
+										isCapturing = true;
+									});
+								},
+								.child = "Start capture",
+							}},
 							Button{
 								.disabled = !loginComplete,
 								.onClick = [this]() {
@@ -316,19 +326,6 @@ namespace ui {
 									autoexport::openFolder();
 								},
 								.child = "Open exports folder",
-							},
-							Button{
-								.onClick = [this]() {
-									if (isCapturing) {
-										pcap.stop();
-									} else {
-										pcap.listen();
-									}
-									setState([&]() {
-										isCapturing = !isCapturing;
-									});
-								},
-								.child = isCapturing ? "Stop capture" : "Start capture",
 							},
 						},
 					},
@@ -353,33 +350,10 @@ namespace ui {
 		auto region = getSelectedRegion();
 		return Expander{
 			.title = "Settings",
-			.subtitle = region ? std::format("Region: {}", *region) : std::string{"Region: detected when you log in"},
+			.subtitle = region ? std::format("Region: {} (detected at login)", *region) : std::string{"Region: detected automatically when you log in"},
 			.content = Column{
 				.spacer = ExpanderItemSpacer{},
 				.children{
-					ExpanderItem{
-						.title = "Region",
-						.subtitle = "Detected automatically from your login and remembered. Change it only if detection fails.",
-						.action = DropdownButton{
-							.text = region.value_or("Auto-detect"),
-							.items = [&]() {
-								std::vector<ContextMenu::Item> items;
-								auto &datamine = serialization::Datamine::get();
-								for (const auto &[name, seed]: datamine.xorSeeds) {
-									items.push_back(ContextMenu::Button{
-										.text = name,
-										.callback = [this, seed, name]() {
-											crypto::xorpad::initialSeed = std::stoull(seed, nullptr, 16);
-											settings.region = name;
-											appsettings::save(settings);
-											setState();
-										},
-									});
-								}
-								return items;
-							}(),
-						},
-					},
 					ExpanderItem{
 						.icon = toggle(settings.autoSave, [this](bool v) { settings.autoSave = v; }),
 						.title = "Save automatically when you log in",
