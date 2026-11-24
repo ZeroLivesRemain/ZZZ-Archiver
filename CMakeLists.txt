@@ -27,6 +27,8 @@ COMMAND ${CMAKE_COMMAND} -E copy_directory "${PROJECT_SOURCE_DIR}/assets" ${PROJ
 file(GLOB_RECURSE all_files CONFIGURE_DEPENDS "src/*.cpp" "src/*.cc" "src/*.h" "src/*.hpp")
 add_executable(zzz_packet_capture main.cpp ${all_files})
 target_compile_features(zzz_packet_capture PUBLIC cxx_std_23)
+# The program is distributed as ZZZ Disc Archiver (the target keeps upstream's name)
+set_target_properties(zzz_packet_capture PROPERTIES OUTPUT_NAME "ZZZ-Disc-Archiver")
 target_include_directories(zzz_packet_capture PRIVATE src)
 target_compile_definitions(zzz_packet_capture PRIVATE NOMINMAX)
 

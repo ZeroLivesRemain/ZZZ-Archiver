@@ -6,7 +6,9 @@
 #include "theme.hpp"
 #include "ui/exportSettings.hpp"
 #include "util/debug.hpp"
+#include "widgets/box.hpp"
 #include "widgets/button.hpp"
+#include "widgets/card.hpp"
 #include "widgets/column.hpp"
 #include "widgets/dropdownButton.hpp"
 #include "widgets/expander.hpp"
@@ -16,6 +18,7 @@
 #include "widgets/text.hpp"
 #include "widgets/toggleSwitch.hpp"
 #include "widgets/topNav.hpp"
+#include <filesystem>
 
 
 namespace ui {
@@ -136,7 +139,8 @@ namespace ui {
 		pcap.pendingChanges = 0;
 		pendingChanges = 0;
 		savedPath = path->string();
-		savedSummary = std::format("{} discs, {} agents, {} W-Engines · saved {}", pcap.discs.size(), pcap.agents.size(), pcap.engines.size(), autoexport::timestamp("%H:%M:%S"));
+		savedSummary = std::format("{} discs · {} agents · {} W-Engines", pcap.discs.size(), pcap.agents.size(), pcap.engines.size());
+		savedTime = autoexport::timestamp("%H:%M:%S");
 	}
 
 	// Writes a new timestamped file (and latest.json) with everything captured so far, including changes made
@@ -150,19 +154,30 @@ namespace ui {
 			pcap.pendingChanges = 0;
 			pendingChanges = 0;
 			savedPath = path->string();
-			savedSummary = std::format("{} discs, {} agents, {} W-Engines · saved {}", pcap.discs.size(), pcap.agents.size(), pcap.engines.size(), autoexport::timestamp("%H:%M:%S"));
+			savedSummary = std::format("{} discs · {} agents · {} W-Engines", pcap.discs.size(), pcap.agents.size(), pcap.engines.size());
+		savedTime = autoexport::timestamp("%H:%M:%S");
 		}
 		setState();
 	}
 
-	std::string Home::State::statusText() {
+	// The status card: one short headline, then the details on a wrapped line of their own.
+	std::string Home::State::statusHeadline() {
 		std::scoped_lock lock{*statusMutex};
-		if (loginComplete && pendingChanges > 0)
-			return std::format("{} change{} since the last save. Press Save updated export to write a new file.", pendingChanges, pendingChanges == 1 ? "" : "s");
-		if (!savedPath.empty()) return std::format("Saved to {} ({}). Changes you make in game are tracked while capture runs.", savedPath, savedSummary);
-		if (loginComplete) return "Data captured. Turn on automatic saving or press Save updated export to write the file.";
-		if (isCapturing) return "Capturing. Launch Zenless Zone Zero and log in (if it is already open, log out to the title screen and back in).";
-		return "Capture is off. Press Start capture, then log in to the game.";
+		if (!isCapturing) return "Capture is off";
+		if (!loginComplete) return "Waiting for login";
+		if (pendingChanges > 0) return std::format("{} change{} since the last save", pendingChanges, pendingChanges == 1 ? "" : "s");
+		if (!savedPath.empty()) return "Export saved";
+		return "Data captured";
+	}
+
+	std::string Home::State::statusDetail() {
+		std::scoped_lock lock{*statusMutex};
+		const std::string file = savedPath.empty() ? std::string{} : std::filesystem::path(savedPath).filename().string();
+		if (!isCapturing) return "Press Start capture, then log in to Zenless Zone Zero.";
+		if (!loginComplete) return "Launch Zenless Zone Zero and log in. If it's already open, log out to the title screen and back in.";
+		if (pendingChanges > 0) return file.empty() ? "Press Save updated export to write the file." : std::format("Press Save updated export to write a new file. Last saved at {}: {}", savedTime, file);
+		if (!savedPath.empty()) return std::format("{} · saved at {} as {}. Changes you make in game are tracked while capture runs.", savedSummary, savedTime, file);
+		return "Press Save updated export to write the file.";
 	}
 
 	void Home::State::updateData() {
@@ -250,6 +265,114 @@ namespace ui {
 	}
 
 
+	Child Home::State::statusCard(const Element &element) {
+		const bool waiting = isCapturing && !loginComplete;
+		const bool attention = loginComplete && pendingChanges > 0;
+		return Card{
+			.widget{
+				.height = Size::Wrap,
+				.padding = Padding{16.f},
+			},
+			.child = Column{
+				.widget{.height = Size::Wrap},
+				.spacing = 10.f,
+				.children{
+					Row{
+						.widget{.height = Size::Wrap},
+						.crossAxisAlignment = Flex::Alignment::center,
+						.spacing = 10.f,
+						.children{
+							FontIcon{
+								.size = 22.f,
+								.fontSize = 22.f,
+								.font = FontStore::defaultIconsFilled,
+								.color = !isCapturing ? Color(0xFFFFFF80) : (waiting || attention) ? Color(0xFFC857FF) : Theme::of(element).accent,
+								.icon = static_cast<char32_t>(!isCapturing || waiting ? 0xe8b5 : attention ? 0xe627 : 0xe86c),// schedule / sync / check_circle
+							},
+							Text{
+								.text = statusHeadline(),
+								.fontSize = 18.f,
+							},
+						},
+					},
+					Text{
+						.text = statusDetail(),
+						.lineWrap = true,
+						.color = Color(0xFFFFFFB4),
+					},
+					Row{
+						.widget{.height = Size::Wrap},
+						.spacing = 8.f,
+						.children{
+							// Capture runs continuously; this only appears if it isn't running (start-on-open switched off)
+							isCapturing ? Child{} : Child{Button{
+								.onClick = [this]() {
+									pcap.listen();
+									setState([&]() {
+										isCapturing = true;
+									});
+								},
+								.child = "Start capture",
+							}},
+							Button{
+								.disabled = !loginComplete,
+								.onClick = [this]() {
+									saveUpdatedExport();
+								},
+								.child = pendingChanges > 0 ? std::format("Save updated export ({})", pendingChanges) : std::string{"Save updated export"},
+							},
+							Button{
+								.onClick = []() {
+									autoexport::openFolder();
+								},
+								.child = "Open exports folder",
+							},
+						},
+					},
+				},
+			},
+		};
+	}
+
+	Child Home::State::settingsSection() {
+		auto toggle = [this](bool value, std::function<void(bool)> set) {
+			return ToggleSwitch{
+				.active = value,
+				.statePosition = ToggleSwitch::StatePosition::None,
+				.onToggle = [this, set](bool val) {
+					setState([&]() {
+						set(val);
+					});
+					appsettings::save(settings);
+				},
+			};
+		};
+		auto region = getSelectedRegion();
+		return Expander{
+			.title = "Settings",
+			.subtitle = region ? std::format("Region: {} (detected at login)", *region) : std::string{"Region: detected automatically when you log in"},
+			.content = Column{
+				.spacer = ExpanderItemSpacer{},
+				.children{
+					ExpanderItem{
+						.icon = toggle(settings.autoSave, [this](bool v) { settings.autoSave = v; }),
+						.title = "Save automatically when you log in",
+						.subtitle = "Writes a dated file and latest.json to the exports folder as soon as your data is captured.",
+					},
+					ExpanderItem{
+						.icon = toggle(settings.autoStart, [this](bool v) { settings.autoStart = v; }),
+						.title = "Start capturing when the program opens",
+					},
+					ExpanderItem{
+						.icon = toggle(settings.autoUpdateData, [this](bool v) { settings.autoUpdateData = v; }),
+						.title = "Update game data automatically",
+						.subtitle = "Downloads new decoding data after a game patch without asking.",
+					},
+				},
+			},
+		};
+	}
+
 	squi::core::Child Home::State::build(const Element &element) {
 		if (isLoading) {
 			return Text{
@@ -272,7 +395,7 @@ namespace ui {
 				.children{
 					Text{.text = "Could not load the game data: " + loadError},
 					Text{.text = "Check your internet connection and start the program again."},
-					Text{.text = "Details are in logs\\zzz_packet_capture.log next to the program."},
+					Text{.text = "Details are in logs\\zzz_disc_archiver.log next to the program."},
 				},
 			};
 		}
@@ -331,128 +454,14 @@ namespace ui {
 						},
 						.spacing = 4.f,
 						.children{
-							Expander{
-								.title = "Scanning",
-								.action = Row{
-									.widget{
-										.width = Size::Wrap,
-									},
-									.crossAxisAlignment = Flex::Alignment::center,
-									.spacing = 4.f,
-									.children{
-										DropdownButton{
-											.text = getSelectedRegion().value_or("Region: auto-detect"),
-											.items = [&]() {
-												std::vector<ContextMenu::Item> items;
-												auto &datamine = serialization::Datamine::get();
-												for (const auto &[region, seed]: datamine.xorSeeds) {
-													items.push_back(ContextMenu::Button{
-														.text = region,
-														.callback = [this, seed, region]() {
-															crypto::xorpad::initialSeed = std::stoull(seed, nullptr, 16);
-															settings.region = region;
-															appsettings::save(settings);
-															setState();
-														},
-													});
-												}
-												return items;
-											}(),
-										},
-										Button{
-											.onClick = [this]() {
-												if (isCapturing) {
-													pcap.stop();
-												} else {
-													pcap.listen();
-												}
-												setState([&]() {
-													isCapturing = !isCapturing;
-												});
-											},
-											.child = isCapturing ? "Capturing..." : "Start capture",
-										},
-									},
-								},
-							},
-							Expander{
-								.title = "Automatic export",
-								.subtitle = statusText(),
-								.action = Row{
-									.widget{
-										.width = Size::Wrap,
-									},
-									.crossAxisAlignment = Flex::Alignment::center,
-									.spacing = 4.f,
-									.children{
-										Button{
-											.disabled = !loginComplete,
-											.onClick = [this]() {
-												saveUpdatedExport();
-											},
-											.child = pendingChanges > 0 ? std::format("Save updated export ({})", pendingChanges) : std::string{"Save updated export"},
-										},
-										Button{
-											.onClick = []() {
-												autoexport::openFolder();
-											},
-											.child = "Open exports folder",
-										},
-									},
-								},
-								.content = Column{
-									.spacer = ExpanderItemSpacer{},
-									.children{
-										ExpanderItem{
-											.icon = ToggleSwitch{
-												.active = settings.autoSave,
-												.statePosition = ToggleSwitch::StatePosition::None,
-												.onToggle = [this](bool val) {
-													setState([&]() {
-														settings.autoSave = val;
-													});
-													appsettings::save(settings);
-												},
-											},
-											.title = "Save a JSON file automatically when you log in",
-											.subtitle = "Written to the exports folder next to this program as soon as your data is captured. Changes you make while playing are kept: press Save updated export for a new file. latest.json is always the newest.",
-										},
-										ExpanderItem{
-											.icon = ToggleSwitch{
-												.active = settings.autoStart,
-												.statePosition = ToggleSwitch::StatePosition::None,
-												.onToggle = [this](bool val) {
-													setState([&]() {
-														settings.autoStart = val;
-													});
-													appsettings::save(settings);
-												},
-											},
-											.title = "Start capturing when the program opens",
-											.subtitle = "Your region is detected automatically when you log in.",
-										},
-										ExpanderItem{
-											.icon = ToggleSwitch{
-												.active = settings.autoUpdateData,
-												.statePosition = ToggleSwitch::StatePosition::None,
-												.onToggle = [this](bool val) {
-													setState([&]() {
-														settings.autoUpdateData = val;
-													});
-													appsettings::save(settings);
-												},
-											},
-											.title = "Update game data automatically",
-											.subtitle = "Downloads new data files after a game patch without asking.",
-										},
-									},
-								},
-							},
+							statusCard(element),
+							settingsSection(),
 							ui::ExportSettings{
 								.exportSettings = exportSettings,
 							},
 							Expander{
-								.title = "Export results",
+								.title = "Copy to clipboard instead",
+								.subtitle = "For tools that take a pasted export. Uses the export settings above.",
 								.action = Button{
 									.onClick = [this]() {
 										auto json = [&]() {
@@ -466,14 +475,14 @@ namespace ui {
 										}
 										Clipboard::of(this).set(*json);
 									},
-									.child = "Copy to clipboard",
+									.child = "Copy",
 								},
 							},
 						},
 					},
 				},
 				TopNav::Page{
-					.name = "Agents",
+					.name = pcap.agents.empty() ? std::string{"Agents"} : std::format("Agents {}", pcap.agents.size()),
 					.icon = pcap.agents.empty()//
 							  ? Child{}
 							  : FontIcon{
@@ -481,7 +490,6 @@ namespace ui {
 									.color = Theme::of(element).accent,
 									.icon = 0xe86c,
 								},
-					.badge = std::format("{}", pcap.agents.size()),
 					.content = ScrollView{
 						.key = IndexKey(1),
 						.scrollWidget{.padding = 8.f},
@@ -504,7 +512,7 @@ namespace ui {
 					},
 				},
 				TopNav::Page{
-					.name = "Engines",
+					.name = pcap.engines.empty() ? std::string{"Engines"} : std::format("Engines {}", pcap.engines.size()),
 					.icon = pcap.engines.empty()//
 							  ? Child{}
 							  : FontIcon{
@@ -512,7 +520,6 @@ namespace ui {
 									.color = Theme::of(element).accent,
 									.icon = 0xe86c,
 								},
-					.badge = std::format("{}", pcap.engines.size()),
 					.content = ScrollView{
 						.key = IndexKey(2),
 						.scrollWidget{.padding = 8.f},
@@ -535,7 +542,7 @@ namespace ui {
 					},
 				},
 				TopNav::Page{
-					.name = "Discs",
+					.name = pcap.discs.empty() ? std::string{"Discs"} : std::format("Discs {}", pcap.discs.size()),
 					.icon = pcap.discs.empty()//
 							  ? Child{}
 							  : FontIcon{
@@ -543,7 +550,6 @@ namespace ui {
 									.color = Theme::of(element).accent,
 									.icon = 0xe86c,
 								},
-					.badge = std::format("{}", pcap.discs.size()),
 					.content = ScrollView{
 						.key = IndexKey(3),
 						.scrollWidget{.padding = 8.f},
