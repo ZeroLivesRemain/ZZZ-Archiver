@@ -31,7 +31,8 @@ namespace ui {
 			bool autoUpdatePending = false;
 			std::shared_ptr<std::mutex> statusMutex = std::make_shared<std::mutex>();
 			std::string savedPath{};
-			std::string savedSummary{};
+			std::string savedSummary{};      // "737 discs · 46 agents · 271 W-Engines"
+			std::string savedTime{};
 			uint32_t autoSavedLogin = 0;     // loginSerial of the last login that was auto-saved
 			uint32_t pendingChanges = 0;     // copy of pcap.pendingChanges for the UI
 			bool loginComplete = false;      // copy of pcap.loginComplete() for the UI
@@ -41,7 +42,10 @@ namespace ui {
 			void guarded(const std::function<void()> &fn);
 			void applySavedRegionAndAutoStart();
 			void handleCaptureEvent();
-			std::string statusText();
+			std::string statusHeadline();
+			std::string statusDetail();
+			Child statusCard(const Element &element);
+			Child settingsSection();
 
 			void initState() override;
 

@@ -36,7 +36,7 @@ int main(int argc, char **argv) {
 
 	core::App app{
 		.windowOptions{
-			.name = "ZZZ Packet Capture (auto-export)",
+			.name = "ZZZ Archiver",
 		},
 		.child = ui::Home{},
 		.theme = Theme{
