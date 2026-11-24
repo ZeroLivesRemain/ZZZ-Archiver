@@ -15,7 +15,7 @@ namespace Serialization::Zod {
 	struct IZOD {
 		std::string format = "ZOD";
 		uint8_t version = 1;
-		std::string source = "ZZZ Packet Capture";
+		std::string source = "ZZZ Disc Archiver";
 		std::optional<std::vector<IAgent>> characters = std::nullopt;
 		std::optional<std::vector<IDisc>> discs = std::nullopt;
 		std::optional<std::vector<IEngine>> wengines = std::nullopt;

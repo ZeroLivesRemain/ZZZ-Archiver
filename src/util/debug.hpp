@@ -38,7 +38,7 @@ namespace debug {
 				std::error_code ec;
 				auto logsDir = executablePath().parent_path() / "logs";
 				std::filesystem::create_directories(logsDir, ec);
-				return std::ofstream{logsDir / "zzz_packet_capture.log", std::ios::app};
+				return std::ofstream{logsDir / "zzz_disc_archiver.log", std::ios::app};
 			}();
 			return file;
 		}

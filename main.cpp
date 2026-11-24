@@ -36,7 +36,7 @@ int main(int argc, char **argv) {
 
 	core::App app{
 		.windowOptions{
-			.name = "ZZZ Archiver",
+			.name = "ZZZ Disc Archiver",
 		},
 		.child = ui::Home{},
 		.theme = Theme{

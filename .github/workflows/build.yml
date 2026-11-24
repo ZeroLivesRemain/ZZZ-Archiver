@@ -83,7 +83,7 @@ jobs:
       - name: Package
         shell: pwsh
         run: |
-          $out = "dist\zzz_packet_capture"
+          $out = "dist\ZZZ-Disc-Archiver"
           New-Item -ItemType Directory -Force -Path $out | Out-Null
           Copy-Item build\Release\*.exe $out
           Copy-Item build\Release\*.dll $out -ErrorAction SilentlyContinue
@@ -104,21 +104,21 @@ jobs:
             Write-Warning "Could not bundle nanoka data: $_"
           }
           Get-ChildItem -Recurse $out | Select-Object FullName, Length | Format-Table -AutoSize
-          Compress-Archive -Path "$out\*" -DestinationPath "dist\zzz_packet_capture_auto_export.zip" -Force
+          Compress-Archive -Path "$out\*" -DestinationPath "dist\ZZZ-Disc-Archiver.zip" -Force
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: zzz_packet_capture_auto_export
-          path: dist\zzz_packet_capture_auto_export.zip
+          name: ZZZ-Disc-Archiver
+          path: dist\ZZZ-Disc-Archiver.zip
 
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
-          name: ZZZ Packet Capture (auto-export) build ${{ github.run_number }}
+          name: ZZZ Disc Archiver build ${{ github.run_number }}
           body: |
-            Download **zzz_packet_capture_auto_export.zip**, extract it, and run `zzz_packet_capture.exe` (it asks for administrator rights).
-            Your export is saved automatically to the `exports` folder next to the program (`latest.json` is always the newest).
-          files: dist\zzz_packet_capture_auto_export.zip
+            Download **ZZZ-Disc-Archiver.zip**, extract it, and run `ZZZ-Disc-Archiver.exe` (it asks for administrator rights), then log in to the game.
+            Your export is saved to the `exports` folder next to the program (`latest.json` is always the newest). Press **Save updated export** after changing discs in game.
+          files: dist\ZZZ-Disc-Archiver.zip
           make_latest: true

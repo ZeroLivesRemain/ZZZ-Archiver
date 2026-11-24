@@ -395,7 +395,7 @@ namespace ui {
 				.children{
 					Text{.text = "Could not load the game data: " + loadError},
 					Text{.text = "Check your internet connection and start the program again."},
-					Text{.text = "Details are in logs\\zzz_packet_capture.log next to the program."},
+					Text{.text = "Details are in logs\\zzz_disc_archiver.log next to the program."},
 				},
 			};
 		}
