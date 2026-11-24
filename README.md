@@ -2,19 +2,20 @@
 
 A fork of [AleXu224/zzz_packet_capture](https://github.com/AleXu224/zzz_packet_capture) (MIT) that works more like Reliquary Archiver:
 
-- **Saves the export automatically.** As soon as your agents, W-Engines and discs are captured, a ZOD JSON file is written to the `exports` folder next to the program: `zzz_export_<date>_<time>.json`, plus `latest.json`, which is always the newest. No "Copy to clipboard" step needed (the button still works).
-- **Remembers your region** and **starts capturing on launch**, so the routine is: open the program, open the game, log in, done.
+- **Starts capturing the moment it opens.** No region to pick: the program tries each region's key on your login and remembers the one that works.
+- **Saves the export automatically when you log in.** As soon as your agents, W-Engines and discs are captured, a ZOD JSON file is written to the `exports` folder next to the program: `zzz_export_<date>_<time>.json`, plus `latest.json`, which is always the newest. No "Copy to clipboard" step needed (the button still works).
+- **Keeps up with your play session.** Leave it running while you play: new discs, upgrades, equip changes, W-Engines and agents are tracked as they happen, and **Save updated export** writes a fresh file with them (the button shows how many changes are waiting). Earlier files are kept.
 - **Updates game data automatically** after a patch instead of asking (it still downloads the data files published by the original project).
-- The **Automatic export** panel shows where the file was saved and has an **Open exports folder** button. All three behaviours can be switched off there.
+- The **Automatic export** panel shows where the file was saved and has **Save updated export** and **Open exports folder** buttons. Automatic saving, starting on launch and data updates can each be switched off there.
 
-Settings are stored in `settings.json` next to the program. All credit for the capture and decoding work goes to AleXu224 and contributors; this fork only changes how results are saved.
+Settings are stored in `settings.json` next to the program. All credit for the capture and decoding work goes to AleXu224 and contributors; this fork changes how capture starts and how results are saved, and adds in-session updates.
 
 ## Quick start (Windows)
 1. Download `zzz_packet_capture_auto_export.zip` from this repository's **Releases** page and extract it.
-2. Run `zzz_packet_capture.exe` (it asks for administrator rights — packet capture needs them).
-3. First time only: pick your region and press **Start capture**.
-4. Launch Zenless Zone Zero and log in. When your character appears, the file is in `exports\latest.json`.
-5. Import that file into your optimizer.
+2. Run `zzz_packet_capture.exe` (it asks for administrator rights — packet capture needs them). Capture starts right away.
+3. Launch Zenless Zone Zero and log in (if the game is already open, log out to the title screen and back in). When your character appears, the file is in `exports\latest.json`.
+4. Import that file into your optimizer.
+5. Keep the program open while you play. When you've farmed or upgraded discs, press **Save updated export** and import the new `latest.json`.
 
 ---
 

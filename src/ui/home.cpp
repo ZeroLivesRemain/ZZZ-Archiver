@@ -82,40 +82,87 @@ namespace ui {
 		}
 	}
 
+	// Capture starts as soon as the program is ready. The region no longer has to be picked: the login packet is
+	// decrypted with each region's key until one works (see Pcap::detectRegionAndServerKey). A remembered region is
+	// only tried first.
 	void Home::State::applySavedRegionAndAutoStart() {
-		if (settings.region.empty()) return;
 		auto &datamine = serialization::Datamine::get();
-		for (const auto &[region, seed]: datamine.xorSeeds) {
-			if (region != settings.region) continue;
-			crypto::xorpad::initialSeed = std::stoull(seed, nullptr, 16);
-			if (settings.autoStart && !isCapturing) {
-				pcap.listen();
-				setState([&]() {
-					isCapturing = true;
-				});
-			} else {
-				setState();
+		if (!settings.region.empty() && !crypto::xorpad::initialSeed) {
+			if (auto it = datamine.xorSeeds.find(settings.region); it != datamine.xorSeeds.end()) {
+				crypto::xorpad::initialSeed = std::stoull(it->second, nullptr, 16);
 			}
-			return;
+		}
+		if (settings.autoStart && !isCapturing) {
+			pcap.listen();
+			setState([&]() {
+				isCapturing = true;
+			});
+		} else {
+			setState();
 		}
 	}
 
+	// Called on the capture thread after each decoded event.
 	void Home::State::handleCaptureEvent() {
-		if (!settings.autoSave) return;
-		if (pcap.discs.empty() || pcap.agents.empty() || pcap.engines.empty()) return;
+		uint32_t login = 0;
+		bool complete = false;
+		uint32_t pending = 0;
+		std::optional<std::string> detected;
+		{
+			std::scoped_lock lock{*pcap.dataMutex};
+			login = pcap.loginSerial;
+			complete = pcap.loginComplete();
+			pending = pcap.pendingChanges;
+			detected = pcap.detectedRegion;
+		}
+		if (detected && *detected != settings.region) {
+			settings.region = *detected;
+			appsettings::save(settings);
+		}
+		{
+			std::scoped_lock lock{*statusMutex};
+			loginComplete = complete;
+			pendingChanges = pending;
+		}
+
+		// The full export is written once per login, as soon as all three lists have arrived.
+		// Changes made while playing are saved with the "Save updated export" button.
+		if (!complete || !settings.autoSave || autoSavedLogin == login) return;
+		autoSavedLogin = login;
+		exportSession = {};
 		auto path = autoexport::write(pcap, exportSettings, exportSession);
 		if (!path) return;
-		std::scoped_lock lock{*statusMutex};
+		std::scoped_lock lock{*pcap.dataMutex, *statusMutex};
+		pcap.pendingChanges = 0;
+		pendingChanges = 0;
 		savedPath = path->string();
 		savedSummary = std::format("{} discs, {} agents, {} W-Engines · saved {}", pcap.discs.size(), pcap.agents.size(), pcap.engines.size(), autoexport::timestamp("%H:%M:%S"));
 	}
 
+	// Writes a new timestamped file (and latest.json) with everything captured so far, including changes made
+	// while playing. Earlier files are kept, so each save can be imported or compared on its own.
+	void Home::State::saveUpdatedExport() {
+		exportSession = {};
+		auto path = autoexport::write(pcap, exportSettings, exportSession);
+		if (!path) return;
+		{
+			std::scoped_lock lock{*pcap.dataMutex, *statusMutex};
+			pcap.pendingChanges = 0;
+			pendingChanges = 0;
+			savedPath = path->string();
+			savedSummary = std::format("{} discs, {} agents, {} W-Engines · saved {}", pcap.discs.size(), pcap.agents.size(), pcap.engines.size(), autoexport::timestamp("%H:%M:%S"));
+		}
+		setState();
+	}
+
 	std::string Home::State::statusText() {
 		std::scoped_lock lock{*statusMutex};
-		if (!savedPath.empty()) return std::format("Saved to {} ({})", savedPath, savedSummary);
+		if (loginComplete && pendingChanges > 0)
+			return std::format("{} change{} since the last save. Press Save updated export to write a new file.", pendingChanges, pendingChanges == 1 ? "" : "s");
+		if (!savedPath.empty()) return std::format("Saved to {} ({}). Changes you make in game are tracked while capture runs.", savedPath, savedSummary);
+		if (loginComplete) return "Data captured. Turn on automatic saving or press Save updated export to write the file.";
 		if (isCapturing) return "Capturing. Launch Zenless Zone Zero and log in (if it is already open, log out to the title screen and back in).";
-		if (settings.region.empty()) return "Pick your region and press Start capture. Next time capture starts on its own.";
-		return "Ready. Press Start capture, then log in to the game.";
+		return "Capture is off. Press Start capture, then log in to the game.";
 	}
 
 	void Home::State::updateData() {
@@ -294,8 +341,7 @@ namespace ui {
 									.spacing = 4.f,
 									.children{
 										DropdownButton{
-											.disabled = isCapturing,
-											.text = getSelectedRegion().value_or("Select region"),
+											.text = getSelectedRegion().value_or("Region: auto-detect"),
 											.items = [&]() {
 												std::vector<ContextMenu::Item> items;
 												auto &datamine = serialization::Datamine::get();
@@ -314,7 +360,6 @@ namespace ui {
 											}(),
 										},
 										Button{
-											.disabled = !getSelectedRegion().has_value(),
 											.onClick = [this]() {
 												if (isCapturing) {
 													pcap.stop();
@@ -333,11 +378,27 @@ namespace ui {
 							Expander{
 								.title = "Automatic export",
 								.subtitle = statusText(),
-								.action = Button{
-									.onClick = []() {
-										autoexport::openFolder();
+								.action = Row{
+									.widget{
+										.width = Size::Wrap,
 									},
-									.child = "Open exports folder",
+									.crossAxisAlignment = Flex::Alignment::center,
+									.spacing = 4.f,
+									.children{
+										Button{
+											.disabled = !loginComplete,
+											.onClick = [this]() {
+												saveUpdatedExport();
+											},
+											.child = pendingChanges > 0 ? std::format("Save updated export ({})", pendingChanges) : std::string{"Save updated export"},
+										},
+										Button{
+											.onClick = []() {
+												autoexport::openFolder();
+											},
+											.child = "Open exports folder",
+										},
+									},
 								},
 								.content = Column{
 									.spacer = ExpanderItemSpacer{},
@@ -353,8 +414,8 @@ namespace ui {
 													appsettings::save(settings);
 												},
 											},
-											.title = "Save a JSON file automatically",
-											.subtitle = "Written to the exports folder next to this program as soon as your data is captured. latest.json is always the newest.",
+											.title = "Save a JSON file automatically when you log in",
+											.subtitle = "Written to the exports folder next to this program as soon as your data is captured. Changes you make while playing are kept: press Save updated export for a new file. latest.json is always the newest.",
 										},
 										ExpanderItem{
 											.icon = ToggleSwitch{
@@ -368,7 +429,7 @@ namespace ui {
 												},
 											},
 											.title = "Start capturing when the program opens",
-											.subtitle = "Uses the last region you picked.",
+											.subtitle = "Your region is detected automatically when you log in.",
 										},
 										ExpanderItem{
 											.icon = ToggleSwitch{
@@ -394,8 +455,11 @@ namespace ui {
 								.title = "Export results",
 								.action = Button{
 									.onClick = [this]() {
-										auto zod = Serialization::Zod::IZOD::fromPcap(pcap, exportSettings);
-										auto json = glz::write_json(zod);
+										auto json = [&]() {
+											std::scoped_lock lock{*pcap.dataMutex};
+											auto zod = Serialization::Zod::IZOD::fromPcap(pcap, exportSettings);
+											return glz::write_json(zod);
+										}();
 										if (!json) {
 											debug::log("Failed to serialize ZOD: {}", static_cast<int>(json.error()));
 											return;
@@ -424,6 +488,7 @@ namespace ui {
 						.spacing = 8.f,
 						.children = [&]() {
 							Children ret;
+							std::scoped_lock lock{*pcap.dataMutex};
 
 							for (const auto &[index, agent]: pcap.agents | std::views::enumerate) {
 								ret.emplace_back(
@@ -454,6 +519,7 @@ namespace ui {
 						.spacing = 8.f,
 						.children = [&]() {
 							Children ret;
+							std::scoped_lock lock{*pcap.dataMutex};
 
 							for (const auto &[index, engine]: pcap.engines | std::views::enumerate) {
 								ret.emplace_back(
@@ -484,6 +550,7 @@ namespace ui {
 						.spacing = 8.f,
 						.children = [&]() {
 							Children ret;
+							std::scoped_lock lock{*pcap.dataMutex};
 
 							for (const auto &[index, disc]: pcap.discs | std::views::enumerate) {
 								ret.emplace_back(
