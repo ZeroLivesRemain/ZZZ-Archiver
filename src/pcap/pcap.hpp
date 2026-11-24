@@ -152,7 +152,7 @@ struct Pcap {
 		if (f.type() == google::protobuf::UnknownField::TYPE_VARINT) {
 			out.push_back(f.varint());
 		} else if (f.type() == google::protobuf::UnknownField::TYPE_LENGTH_DELIMITED) {
-			const std::string &bytes = f.length_delimited();
+			const auto bytes = f.length_delimited();
 			uint64_t value = 0;
 			int shift = 0;
 			for (unsigned char c: bytes) {
