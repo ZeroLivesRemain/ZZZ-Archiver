@@ -8,6 +8,7 @@
 #include <ctime>
 #include <filesystem>
 #include <fstream>
+#include <mutex>
 #include <optional>
 #include <string>
 
@@ -50,8 +51,11 @@ namespace autoexport {
 
 	// Returns the session file path on success. Safe to call repeatedly: later calls overwrite the same files.
 	inline std::optional<std::filesystem::path> write(const Pcap &pcap, const data::ExportSettings &settings, Session &session) {
-		auto zod = Serialization::Zod::IZOD::fromPcap(pcap, settings);
-		auto json = glz::write_json(zod);
+		auto json = [&]() {
+			std::scoped_lock lock{*pcap.dataMutex};
+			auto zod = Serialization::Zod::IZOD::fromPcap(pcap, settings);
+			return glz::write_json(zod);
+		}();
 		if (!json) {
 			debug::log("Auto-export: failed to serialize ZOD ({})", static_cast<int>(json.error()));
 			return std::nullopt;

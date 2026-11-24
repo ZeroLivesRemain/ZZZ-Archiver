@@ -8,8 +8,8 @@
 // Persistent user preferences, stored as settings.json next to the executable.
 namespace appsettings {
 	struct AppSettings {
-		std::string region{};       // last region picked in the dropdown
-		bool autoStart = true;      // start capturing on launch when a region is remembered
+		std::string region{};       // region detected at the last login (tried first next time)
+		bool autoStart = true;      // start capturing as soon as the program opens
 		bool autoSave = true;       // write the ZOD export to disk as soon as data is captured
 		bool autoUpdateData = true; // download new data files without asking
 	};
