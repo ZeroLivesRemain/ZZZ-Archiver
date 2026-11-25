@@ -1,5 +1,8 @@
 name: Build Windows release
 
+# Every push builds and checks the program (the zip is kept as a run artifact).
+# A release is published only when started by hand: Actions → Build Windows release → Run workflow.
+# Publishing removes the older build-N releases and tags, so the Releases page keeps just the newest build.
 on:
   workflow_dispatch:
   push:
@@ -113,6 +116,7 @@ jobs:
           path: dist\ZZZ-Disc-Archiver.zip
 
       - name: Publish release
+        if: github.event_name == 'workflow_dispatch'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
@@ -122,3 +126,22 @@ jobs:
             Your export is saved to the `exports` folder next to the program (`latest.json` is always the newest). Press **Save updated export** after changing discs in game.
           files: dist\ZZZ-Disc-Archiver.zip
           make_latest: true
+
+      - name: Remove older builds
+        if: github.event_name == 'workflow_dispatch'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $keep = "build-${{ github.run_number }}"
+          $repo = "${{ github.repository }}"
+          # Older build releases (and their tags)
+          gh release list -R $repo --limit 200 --json tagName --jq '.[].tagName' | Where-Object { $_ -like 'build-*' -and $_ -ne $keep } | ForEach-Object {
+            Write-Host "Deleting release $_"
+            gh release delete $_ -R $repo --cleanup-tag --yes
+          }
+          # Leftover build tags without a release (upstream's v* tags are kept)
+          gh api "repos/$repo/tags?per_page=100" --jq '.[].name' | Where-Object { $_ -like 'build-*' -and $_ -ne $keep } | ForEach-Object {
+            Write-Host "Deleting tag $_"
+            gh api -X DELETE "repos/$repo/git/refs/tags/$_"
+          }
