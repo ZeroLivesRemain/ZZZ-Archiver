@@ -2,6 +2,7 @@
 
 #include "debug.hpp"
 #include "serializable.hpp"
+#include "data/exportSettings.hpp"
 #include <filesystem>
 #include <string>
 
@@ -12,6 +13,8 @@ namespace appsettings {
 		bool autoStart = true;      // start capturing as soon as the program opens
 		bool autoSave = true;       // write the ZOD export to disk as soon as data is captured
 		bool autoUpdateData = true; // download new data files without asking
+		data::ExportSettings exportFilters{}; // last export settings used
+		bool exportExpanded = true; // Export settings section open (open on first run)
 	};
 
 	inline std::filesystem::path path() {

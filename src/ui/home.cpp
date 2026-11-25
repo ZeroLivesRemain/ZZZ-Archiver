@@ -24,6 +24,7 @@
 namespace ui {
 	void Home::State::initState() {
 		settings = appsettings::load();
+		exportSettings = settings.exportFilters;
 		auto task = std::thread([this]() { guarded([&]() {
 			std::filesystem::path assetsPath = "assets";
 			if (!std::filesystem::exists(assetsPath)) {
@@ -458,6 +459,17 @@ namespace ui {
 							settingsSection(),
 							ui::ExportSettings{
 								.exportSettings = exportSettings,
+								.expanded = settings.exportExpanded,
+								.onExpandedChange = [this](bool open) {
+									setState([&]() {
+										settings.exportExpanded = open;
+									});
+									appsettings::save(settings);
+								},
+								.onChange = [this]() {
+									settings.exportFilters = exportSettings;
+									appsettings::save(settings);
+								},
 							},
 							Expander{
 								.title = "Copy to clipboard instead",
